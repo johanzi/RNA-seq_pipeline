@@ -387,6 +387,15 @@ This experiment contains 3 biological replicates for 2 tissues (ist and husk) an
 
 Merging the count files
 
+Write python script 
+
+python script.py list_count_file.txt name_samples.txt
+
+list_count_file.txt contains 1 column with names (absolute path possible) of count files
+name_samples.txt contains 2 columns, 1 with count file name, the other with desired sample name to use for RNA-seq
+
+Script should remove unwanted lines at the end of count files (start with __) and check if same row number across files. Paste columns for each files near each other in the order given in the name_samples.txt file. Return `cts` file with matrix genes x samples ready to import in R.
+
 
 #### DESeq
 
