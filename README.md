@@ -41,11 +41,11 @@ Several files are generated including an `accepted_hits.bam` file which will be 
 
 
 
-### Assess strandeness of the library
+## Assess strandeness of the library
 
 Strandeness of the library should be known for the counting step. If you did not get information from your sequencing center, two methods can be used, the first using the RSeQC tool [infer_experiment.py](http://rseqc.sourceforge.net/#infer-experiment-py), the second using IGV (visual approach). These methods used mapped read information (bam/sam file). Inspired from discussion https://www.biostars.org/p/66627/ .
 
-#### RSeQC infer_experiment
+### RSeQC infer_experiment
 ```{bash}
 
 # Install RSeQC
@@ -61,7 +61,7 @@ infer_experiment.py -i <file.sorted.bam> -r <file.bed>
 ```
 The output will tell whether the library is paired-end or single end, and whether it is stranded or unstranded, check [documentation](http://rseqc.sourceforge.net/#infer-experiment-py) for interpretation.
 
-##### Paired-end stranded library
+#### Paired-end stranded library
 
 ```
 This is PairEnd Data
@@ -70,7 +70,7 @@ Fraction of reads explained by "1++,1--,2+-,2-+": 0.4903
 Fraction of reads explained by "1+-,1-+,2++,2--": 0.4925  
  ```
  
-##### Paired-end unstranded library
+#### Paired-end unstranded library
 
 ```
 This is PairEnd Data
@@ -79,7 +79,7 @@ Fraction of reads explained by "1++,1--,2+-,2-+": 0.9441
 Fraction of reads explained by "1+-,1-+,2++,2--": 0.0487  
  ```
  
-##### Paired-end stranded library
+#### Paired-end stranded library
 
 ```
 This is SingleEnd Data
@@ -87,7 +87,7 @@ Fraction of reads failed to determine: 0.0170
 Fraction of reads explained by "++,--": 0.9669  
 Fraction of reads explained by "+-,-+": 0.0161  
 ```
-#### IGV
+### IGV
 
 
 Open the bam file in IGV (need to be sorted and indexed).
@@ -385,60 +385,151 @@ ist_uva_2	ist	uva
 
 This experiment contains 3 biological replicates for 2 tissues (ist and husk) and 2 locations (uva and mpi).
 
-Merging the count files
+Merge the files with the bash script [merge_counts.sh](merge_counts.sh). The script assumes that the different read count files contain the same number of rows and same genes at the same row across files.
 
-Write python script 
+Arguments:
 
-python script.py list_count_file.txt name_samples.txt
+`list_file_counts` : text file containing names (absolute paths accepted) for each read count files to process. All file names should be on separate rows.
 
-list_count_file.txt contains 1 column with names (absolute path possible) of count files
-name_samples.txt contains 2 columns, 1 with count file name, the other with desired sample name to use for RNA-seq
+`sample_names` : text file containing sample names which may differ from the names of the read count files. The order of the names should be the same as the order in the <list_file_counts> file. Each name on separate row.
 
-Script should remove unwanted lines at the end of count files (start with __) and check if same row number across files. Paste columns for each files near each other in the order given in the name_samples.txt file. Return `cts` file with matrix genes x samples ready to import in R.
+The output is sent to stdout and consists of a matrix of genes x samples. Names of the genes are in the first column (no header) and read counts are in the consecutive columns with the sample name as header. 
 
+Generate merged file called count matrix (cts) in DESeq pipeline:
+```
+bash merge_counts.sh list_file_counts.txt sample_names.txt > cts.txt
+```
+
+---
 
 #### DESeq
 
-Check documentation DESeq
+DESeq allows to assess differential expression based on the read count performed in HTSeq. Check documentation [DESeq](http://bioconductor.org/packages/release/bioc/manuals/DESeq/man/DESeq.pdf) for more information.
 
+Install DESeq
 ```{r}
-
 source("http://bioconductor.org/biocLite.R")
 biocLite("DESeq")
 library ("DESeq")
+```
 
+Upload data
+```{r}
 # Import the cts matrix (not gene name is now the row name => required)
 counts = read.table ("cts.txt", header=TRUE, row.names=1)
 
 # Upload the coldata file
 experiment=read.table ("coldata.txt")
 
-# Make a new countDataSet
-cdsFull = newCountDataSet(counts, experiment )
+```
+
+
+##### Single factor
+
+If there is only 1 factor to consider (e.g. tissue type), DESeq can be used with its binomial test. We need then to remove the `location` factor from `experiment`.
+
+Mention which tissue comes first, in this case, it is more logical to see the change in time (from younger ist tissue to older husk tissue).
+
+```{r}
+
+tissue <- experiment$tissue 
+
+cds <- newCountDataSet(counts, tissue)
+
+cds <- estimateSizeFactors(cds)
+
+sizeFactors(cds)
+
+cds <- estimateDispersions(cds)
+
+res <- nbinomTest( cds, "ist", "husk" ) 
+
+head (res)
+
+write.table(res, file="single_factor.tab", sep="\t") 
+
+```
+
+
+##### Multiple factors
+
+If more than 1 factor to consider, we can use a GLM fitting to negative binomial law.
+
+Principal components biplot on variance stabilized data, color-coded by condition-librarytype. The principal component is the tissue type while the second is the location (at least for Husk UVA and Husk MPI as IST from both locations are clustered along the first componenent).
+
+Create R object
+```{r}
+cdsFull = newCountDataSet( counts, experiment )
+
+cdsFull = estimateSizeFactors( cdsFull )
+
+cdsFull = estimateDispersions( cdsFull )
+plotDispEsts( cdsFull )
+```
+
+Normalize data and visualize dispersion and PCA
+```{r}
 
 # Normalization between samples (size and dispersion)
 cdsFull = estimateSizeFactors( cdsFull )
 cdsFull = estimateDispersions( cdsFull )
+
+# Plot dispersion
 plotDispEsts( cdsFull, main="DESeq: Per-gene dispersion estimates")
 
-# Principal components biplot on variance stabilized data, color-coded by condition-librarytype
-# The principal component is the tissue type while the second is the location (at least for Husk UVA and Husk MPI as IST from both locations are clustered along the first componenent)
+# PCA
 print(plotPCA(varianceStabilizingTransformation(cdsFull), intgroup=c("location", "tissue")))
+```
 
+
+Create the GLMs for null and alternative hypothesis
+```{r}
 # Fit full and reduced models, get p-values
 fit1 = fitNbinomGLMs( cdsFull, count ~ location + tissue ) #full model
 
 # Create a GLM without the factor tissue, which should be null as
 # we expect most of the variation coming from the tissue
 fit0 = fitNbinomGLMs( cdsFull, count ~ location ) # reduced model
+```
+
+Assess differences between the 2 models and perform a correction of Benjamini & Hochberg (1995) ("BH" or its alias "fdr"). This controls the false discovery rate, the expected proportion of false discoveries amongst the rejected hypotheses. The false discovery rate is a less stringent condition than the family-wise error rate, so these methods are more powerful than the others.
+```{r} 
+# Get p-values and adjusted p-values
+pvalsGLM = nbinomGLMTest(fit1, fit0)
+padjGLM = p.adjust(pvalsGLM, method="BH")
+```
+
+Bind `fit1` and `padGLM` to get back gene names and their associated p-value. `GLM_padj.tab` contains the GLM equation and associated adjusted p-value for each gene.
+```{r}
+res = cbind(fit1, padjGLM) #the cbind add automatically as header the name of the file to merge
+write.table(res, file="GLM_padj.tab", sep="\t") 
+```
 
 
-# For each gene, the function calculates a chi-square p value by simply calculating: 1 - pchisq(resReduced$deviance - resFull$deviance, attr(resReduced, "df.residual") - attr(resFull, "df.residual")).
+
+
+
+```{r}
+# For each gene, the function calculates a chi-square p value by simply calculating: 1 - 
+
+pchisq(resReduced$deviance - resFull$deviance, attr(resReduced, "df.residual") - attr(resFull, "df.residual")).
+
+```
+
+```{r}
+
+
+
+
+
+
+
+
 
 pvalsGLM = nbinomGLMTest( fit1, fit0 )
 
 # Make results table with pvalues and adjusted p-values
-# Correction Benjamini & Hochberg (1995) ("BH" or its alias "fdr"). control the false discovery rate, the expected proportion of false discoveries amongst the rejected hypotheses. The false discovery rate is a less stringent condition than the family-wise error rate, so these methods are more powerful than the others.
+# 
 padjGLM = p.adjust( pvalsGLM, method="BH" ) 
 
 # Erwin merges the table given by fit1 and fit0 to the padjGLM to have everything on the same file. The outcome files contain only p-value but no gene names anymore.
