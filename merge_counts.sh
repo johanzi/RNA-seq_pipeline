@@ -52,9 +52,6 @@ list_samples=$2
 ln_list_files=$( wc -l $list_files | cut -d' ' -f1)
 ln_list_samples=$( wc -l $list_samples | cut -d' ' -f1)
 
-echo $ln_list_samples
-echo $ln_list_files
-
 if [[ $ln_list_files != $ln_list_samples ]]; then
 	echo "$list_files and $list_samples have different row number.\
  The row number should be equal!."

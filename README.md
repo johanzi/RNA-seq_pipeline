@@ -349,7 +349,7 @@ TOFIX: maybe the sorting of the bam file is not correct for paired end reads as 
 Warning: 18622094 reads with missing mate encountered.
 
 
-##### Merge counts for all bam files
+##### Merge counts for all samples
 
 DESeq takes as input a count matrix (called `cts`) containing in row the genes with their read count and in column the different samples. In addition, DESeq requires a table of sample information (called `coldata`).
 
@@ -383,7 +383,7 @@ ist_uva_1	ist	uva
 ist_uva_2	ist	uva
 ```
 
-This experiment contains 3 biological replicates for 2 tissues (ist and husk) and 2 locations (uva and mpi).
+This experiment contains 3 biological replicates for 2 tissues (ist and husk) and 2 locations (uva and mpi) for a total of 12 samples.
 
 Merge the files with the bash script [merge_counts.sh](merge_counts.sh). The script assumes that the different read count files contain the same number of rows and same genes at the same row across files.
 
@@ -447,6 +447,19 @@ res <- nbinomTest( cds, "ist", "husk" )
 head (res)
 
 write.table(res, file="single_factor.tab", sep="\t") 
+
+```
+
+If only 1 of the 2 locations needs to be analyzed (e.g. only uva), keep only relevant data in `counts`
+
+```{r}
+
+# Get booleans values TRUE when uva
+uva_samples <- experiment$location == "uva"
+
+counts <- counts[,uva_samples]
+
+# Process the rest as above
 
 ```
 
