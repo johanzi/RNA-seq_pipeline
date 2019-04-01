@@ -1,6 +1,47 @@
-# Pipeline RNA-seq 
+Pipeline RNA-seq 
+===
+
+This pipeline describes all the steps to perform transcriptomic analyses on RNA-seq libraries.
+
+# Table of contents
+
+- [Overview](#overview)
+  * [Read trimming](#read-trimming)
+  * [Read mapping](#read-mapping)
+  * [Assess strandeness of the library](#assess-strandeness-of-the-library)
+    + [RSeQC infer_experiment](#rseqc-infer-experiment)
+      - [Paired-end stranded library](#paired-end-stranded-library)
+      - [Paired-end unstranded library](#paired-end-unstranded-library)
+      - [Paired-end stranded library](#paired-end-stranded-library-1)
+    + [IGV](#igv)
+  * [Gene expression quantification](#gene-expression-quantification)
+    + [Cufflinks pipeline](#cufflinks-pipeline)
+      - [Cufflink](#cufflink)
+      - [Cuffmerge](#cuffmerge)
+      - [Cuffdiff](#cuffdiff)
+      - [CummeRbund](#cummerbund)
+    + [DESeq pipeline](#deseq-pipeline)
+      - [HTseq](#htseq)
+        * [Install HTseq](#install-htseq)
+        * [Counting script](#counting-script)
+        * [Merge counts for all samples](#merge-counts-for-all-samples)
+      - [DESeq](#deseq)
+        * [Single factor](#single-factor)
+        * [Multiple factors](#multiple-factors)
+  * [Gene overlap](#gene-overlap)
+    + [Get overlapping genes](#get-overlapping-genes)
+    + [Generate a Venn Diagram](#generate-a-venn-diagram)
+- [Author: Johan Zicola](#author--johan-zicola)
+
+<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
+
+
+
+# Overview
 
 Pipeline used in my [PhD thesis](https://kups.ub.uni-koeln.de/6786/) and in the paper [Oka et al., 2017](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1273-4). This pipeline used two different methods to call differentially expressed genes: <span style="background-color:blue; color:white"> Cufflinks </span> and <span style="background-color:grey; color:white"> DESeq </span>.
+
+RNA-seq data can be downloaded here
 
 Here an overview of the pipeline with its two methods to assess differential expression (Cufflinks and DESeq methods in blue and grey, respectively):
 
@@ -18,9 +59,9 @@ java -jar trimmomatic-0.33.jar SE -phred33 <input.fastq> <output.fastq> LEADING:
 
 ```
 
-## Read mapping
+## Read mapping with TopHat
 
-The reads were aligned, allowing 1 mismatch, to the reference genome using TopHat2 (tophat-2.1.1). About 90-95% of the reads should be mapping. If less, there can be contamination or bad sequencing. 
+The reads were aligned, allowing 1 mismatch, to the reference genome using TopHat2 (tophat-2.1.1). About 90-95% of the reads should be mapping. If less, there can be contamination or bad sequencing.  Check TopHat manual [here](https://ccb.jhu.edu/software/tophat/manual.shtml).
 
 
 ```
@@ -28,7 +69,7 @@ The reads were aligned, allowing 1 mismatch, to the reference genome using TopHa
 bowtie2-build <file.fa> <prefix>
 
 # Map using tophat2
-tophat -p 8 -i 5 -I 60000 -o <output_dir/> \
+tophat -p 8 -i 5 -I 60000 -o <output_dir/sample_name> \
 		--library-type fr-unstranded \
 		<bowtie_index/prefix> \ 
 		<file.fastq> 
@@ -37,7 +78,58 @@ tophat -p 8 -i 5 -I 60000 -o <output_dir/> \
 samtools sort <file.bam> -o <file.bam>
 		
 ```
-Several files are generated including an `accepted_hits.bam` file which will be used in the next step.
+Several files are generated including an `accepted_hits.bam` file located in teh newly created `output_dir/sample_name` directory which will be used in the next step.
+
+Example of tophat output for sample `husk_mpi_1`:
+
+```
+$ tree husk_mpi_1/
+husk_mpi_1/
+├── accepted_hits.bam
+├── align_summary.txt
+├── deletions.bed
+├── insertions.bed
+├── junctions.bed
+├── logs
+│   ├── bam_merge_um.log
+│   ├── bowtie_build.log
+│   ├── bowtie.left_kept_reads.log
+│   ├── bowtie.left_kept_reads.m2g_um.log
+│   ├── bowtie.left_kept_reads.m2g_um_seg1.log
+│   ├── bowtie.left_kept_reads.m2g_um_seg2.log
+│   ├── bowtie.left_kept_reads.m2g_um_seg3.log
+│   ├── bowtie.left_kept_reads.m2g_um_seg4.log
+│   ├── bowtie.left_kept_reads.m2g_um_seg5.log
+│   ├── g2f.err
+│   ├── g2f.out
+│   ├── gtf_juncs.log
+│   ├── juncs_db.log
+│   ├── long_spanning_reads.segs.log
+│   ├── m2g_left_kept_reads.err
+│   ├── m2g_left_kept_reads.out
+│   ├── prep_reads.log
+│   ├── reports.log
+│   ├── reports.merge_bam.log
+│   ├── reports.samtools_sort.log0
+│   ├── reports.samtools_sort.log1
+│   ├── reports.samtools_sort.log2
+│   ├── reports.samtools_sort.log3
+│   ├── reports.samtools_sort.log4
+│   ├── reports.samtools_sort.log5
+│   ├── reports.samtools_sort.log6
+│   ├── reports.samtools_sort.log7
+│   ├── run.log
+│   ├── segment_juncs.log
+│   └── tophat.log
+├── prep_reads.info
+└── unmapped.bam
+```
+
+The 3 important files are (from TopHat manual):
+1. `accepted_hits.bam`: A list of read alignments in SAM format
+2. `junctions.bed`: A UCSC BED track of junctions reported by TopHat. Each junction consists of two connected BED blocks, where each block is as long as the maximal overhang of any read spanning the junction. The score is the number of alignments spanning the junction
+3. `insertions.bed` and `deletions.bed`. UCSC BED tracks of insertions and deletions reported by TopHat. In `Insertions.bed`, chromLeft refers to the last genomic base before the insertion. In `Deletions.bed`, chromLeft refers to the first genomic base of the deletion
+
 
 
 
@@ -89,6 +181,7 @@ Fraction of reads explained by "+-,-+": 0.0161
 ```
 ### IGV
 
+This method assumes that the map were already mapped (with bowtie for instance). 
 
 Open the bam file in IGV (need to be sorted and indexed).
 ```
@@ -131,17 +224,31 @@ The [Cufflinks pipeline](http://cole-trapnell-lab.github.io/cufflinks/) was used
 
 #### Cufflink
 
-Assemble transcripts
+Assemble transcripts. Check manual of cufflinks [here](http://cole-trapnell-lab.github.io/cufflinks/cufflinks/).
 
 ```
-cufflinks -p 8 --library-type fr-unstranded -o <output_dir/> -G <annotation.gff3> <accepted_hits.bam>
+cufflinks -p 8 --library-type fr-unstranded -o <output_dir/sample_name> -G <annotation.gff3> <accepted_hits.bam>
 ```
+
+The output of cufflinks contains 4 files.
+
+Example of cufflinks output for sample `677_1`:
+
+```
+husk_mpi_1/
+├── genes.fpkm_tracking
+├── isoforms.fpkm_tracking
+├── skipped.gtf
+└── transcripts.gtf
+```
+
+`transcripts.gtf` contains assembled isoforms with FPKM values (fragments per kilobase per million reads mapped). This file is used for merging replicates with cuffmerge.
 
 #### Cuffmerge
 
-Merge assembled transcripts for the different conditions. 
+Merge assembled transcripts for the different conditions. This merged assembly provides a uniform basis for calculating gene and transcript expression in each condition.
 
-Create a text file with the path of all gtf files generated by cuffdiff
+Create a text file with the path of all gtf files generated by cuffdiff:
 ```
 vim assemblies.txt
 
@@ -161,17 +268,13 @@ vim assemblies.txt
 
 Merge the `.gtf.` files together.
 ```
-cuffmerge -o <output_dir/> \
-	-g <annotation.gff3> \ 
-	-s <reference.fasta> \
-	-p 8 \
-	assemblies.txt
+cuffmerge -o <output_dir/> -g <annotation.gff3> -s <reference.fasta> -p 8 assemblies.txt
 ```
 
 
 #### Cuffdiff
 
-Get differential expression results. `merged.gtf` file is generated in the previous step and should be located in the `output_dir/` directory. All bam files generated by tophat should be given for each of the conditions (here 3 bio reps for tissue 1 and 2) and separated by commas.
+Get differential expression results. `merged.gtf` file is generated in the previous step and should be located in the `output_dir/` directory. All bam files generated by tophat should be given for each of the conditions (here 3 bio reps for tissue 1 and 2) and separated by commas. The bam files generated by TopHat are named per default `accepted_hits.bam`. I renamed them to a more meaningful name, however, you can just provide the absolute path for each of the `accepted_hits.bam`.
 
 ```
 cuffdiff -o <output_dir/> \
@@ -181,6 +284,8 @@ cuffdiff -o <output_dir/> \
 		-u <merged.gtf> tissue1_rep1.bam,tissue1_rep2.bam,tissue1_rep3.bam \
 		tissue2_rep1.bam,tissue2_rep2.bam,tissue2_rep3.bam
 ```
+
+NB: Do not put any space between commas for `-L` and the series of bam files.
 
 #### CummeRbund
 
@@ -620,6 +725,8 @@ write.table(overlap, 'overlap.txt', sep='\t',row.names = F, col.names = F, quote
 ### Generate a Venn Diagram
 
 Here I compare the number of DEGs that overlap between the 2 methods: cuffdiff and DESeq.
+Note that values of DEGs have to be entered manually as parameters to build the Venn Diagram.
+
 ```{r}
 install.packages('VennDiagram')
 library(VennDiagram)
