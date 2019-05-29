@@ -153,7 +153,7 @@ infer_experiment.py -i <file.sorted.bam> -r <file.bed>
 ```
 The output will tell whether the library is paired-end or single end, and whether it is stranded or unstranded, check [documentation](http://rseqc.sourceforge.net/#infer-experiment-py) for interpretation.
 
-#### Paired-end stranded library
+#### Paired-end non strand specific library
 
 ```
 This is PairEnd Data
@@ -162,7 +162,7 @@ Fraction of reads explained by "1++,1--,2+-,2-+": 0.4903
 Fraction of reads explained by "1+-,1-+,2++,2--": 0.4925  
  ```
  
-#### Paired-end unstranded library
+#### Paired-end strand specific library
 
 ```
 This is PairEnd Data
@@ -171,7 +171,7 @@ Fraction of reads explained by "1++,1--,2+-,2-+": 0.9441
 Fraction of reads explained by "1+-,1-+,2++,2--": 0.0487  
  ```
  
-#### Paired-end stranded library
+#### Single-end strand specific library
 
 ```
 This is SingleEnd Data
