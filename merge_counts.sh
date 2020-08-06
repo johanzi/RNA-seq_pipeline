@@ -79,7 +79,8 @@ paste -s $list_samples | sed '1s/^/\t/' -
 # and remove lines starting by double underscore (end of lines in HTseq output)
 paste $genes *.read_count | grep -v "__" -
 
-
+# Remove temporary read_count files
+rm *.read_count
 
 
 
