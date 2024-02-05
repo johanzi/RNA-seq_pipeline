@@ -748,10 +748,6 @@ draw.pairwise.venn(area1 = 4739, area2 = 7362, cross.area =3116,
 
 
 
-
-
-
-
 # Author: Johan Zicola
 
 
